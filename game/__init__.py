@@ -36,15 +36,13 @@ class Game(BasicGame):
         self.window.add_font(self.directory / 'FreeMono.ttf')
         document = self.window.load_document(DOCUMENT)
         self.title = document.by_id("title")
-        size = 5
+        size = gl.vec2u(10, 10)
         border = 10
-        self.board = board.create(
-            renderer = self.renderer,
-            entity_manager = self.entity_manager,
-            size = size,
+        self.board = board.load(
+            self.directory / 'resource/map/00.txt',
+            game = self,
             border = border,
-            tile_width = (self.window.width - border * 2) / size,
-            tile_height = (self.window.height - border * 2) / size,
+            screen_size = self.window.size,
         )
         self.player = player.create(
             entity_manager = self.entity_manager,

@@ -1,0 +1,2 @@
+#!/bin/sh
+${CUBE_BIN} .
