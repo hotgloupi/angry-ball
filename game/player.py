@@ -42,8 +42,10 @@ class MovePlayer:
         ))
 
 class AnimatePlayer:
-    channels = ['tick']
+    channels = ['tick', 'set-board-friction']
     velocity = 12
+    friction = 1
+
     def __init__(self,
                  player,
                  power,
@@ -58,6 +60,9 @@ class AnimatePlayer:
         self.transform = self.player.component('transform')
 
     def __call__(self, ev, delta):
+        if ev.channel == 'set-board-friction':
+            self.friction = ev.friction
+            return
         if self.board_size is None:
             return
         if self.power <= 1:
@@ -80,7 +85,7 @@ class AnimatePlayer:
         self.transform.node.value = player_matrix(pos)
 
     def new_pos(self, delta):
-        return self.player.pos + self.dir * delta * self.power * self.velocity
+        return self.player.pos + self.dir * delta * self.power * self.velocity / self.friction
 
 def create(entity_manager, event_manager, renderer, initial_player_pos = (0, 0)):
     mat = gl.Material('player')

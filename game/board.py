@@ -2,6 +2,7 @@ from cube import gl
 from cubeapp.game.entity.component import Transform, Drawable, Bindable, Controller
 from cubeapp.game.entity.component import Component
 from cubeapp.game.entity import System
+from cubeapp.game.event import Event
 
 def pos_to_tile(board, pos):
     tile = gl.vec2i(
@@ -49,7 +50,7 @@ class Cell:
         # Called when the player enter to this tile
         self.set_color(board, tile, gl.col3f('purple'))
 
-    def init(self, board, tile):
+    def prepare(self, board, tile):
         # Called at startup for each board cell
         self.set_color(board, tile, self.color)
 
@@ -62,13 +63,28 @@ class Cell:
         attr[idx + 3] = color
         board.vb.reload(1)
 
+class SetBoardFriction:
+    def __init__(self, friction):
+        self.friction = friction
+
+    def prepare(self, board, tile):
+        pass
+
+    def __call__(self, board, tile):
+        board.event_manager.push(
+            Event('set-board-friction',  friction = self.friction)
+        )
 
 # Mapping between ascii codes and controllers
 # Multiple controllers can be set per character, their __call__ method will
 # be triggered whenever the player cross a particular cell.
 cell_controllers = {
     '@': (Cell(gl.col3f('red')), ),
-    '#': (Cell(gl.col3f('white')), ),
+    '#': (Cell(gl.col3f('white')), SetBoardFriction(friction = .5),),
+    'x': (
+        Cell(gl.col3f('#2342ff')),
+        SetBoardFriction(friction = 5),
+    ),
 }
 
 class CellManager(Controller):
@@ -86,7 +102,7 @@ class CellManager(Controller):
                     tile = gl.vec2i(x, y)
                     controllers = self.cells[tile] = cell_controllers[c]
                     for controller in controllers:
-                        controller.init(board, tile)
+                        controller.prepare(board, tile)
                 x += 1
             y += 1
 
@@ -162,7 +178,8 @@ def create(game, size, border, tile_width, tile_height, rows):
         tile_height = tile_height,
         tile_width = tile_width,
         border = border,
-        rows = rows
+        rows = rows,
+        event_manager = game.event_manager,
     )
     transform = board.add_component(
         Transform(
