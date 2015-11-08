@@ -34,6 +34,7 @@ class Game(BasicGame):
     def __init__(self, window, directory):
         super().__init__(window, directory)
         self.window.add_font(self.directory / 'FreeMono.ttf')
+        self.resource_manager.add_path(str(self.directory / 'resource'))
         document = self.window.load_document(DOCUMENT)
         self.title = document.by_id("title")
         size = gl.vec2u(10, 10)

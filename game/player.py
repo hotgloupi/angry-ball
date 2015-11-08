@@ -1,13 +1,20 @@
 
-from cube import gl, units
+from pathlib import Path
+
+from cube import gl, units, scene
 from cubeapp.game.event import Event, Channel
 from cubeapp.game.entity.component import Transform, Drawable, Bindable, Controller
 
 def player_matrix(pos):
-    return gl.matrix.scale(
-        gl.matrix.translate(gl.mat4f(), pos),
-        gl.vec3f(20, 20, 1)
+    return gl.matrix.rotate(
+        gl.matrix.scale(
+            gl.matrix.translate(gl.mat4f(), pos),
+            gl.vec3f(200, 200, 1)
+        ),
+        units.deg(0),
+        gl.vec3f(1, 1, 0)
     )
+
 
 class MovePlayer:
     channels = ['move-player', 'board-size']
@@ -88,12 +95,14 @@ class AnimatePlayer:
         return self.player.pos + self.dir * delta * self.power * self.velocity / self.friction
 
 def create(entity_manager, event_manager, renderer, initial_player_pos = (0, 0)):
-    mat = gl.Material('player')
-    mat.ambient = gl.col3f('lightblue')
-    #mat.diffuse = gl.col3f('black')
-    #mat.specular = gl.col3f('black')
-    mat.opacity = 1
-    mesh = gl.Spheref(gl.vec3f(0, 0, 0), 100).drawable(renderer)
+    s = """
+tess 6
+shader img/rabbit.tif
+s 1.0 -4.0 2.0 4.0 20 20
+    """
+    sc = scene.from_string(s, "nff")
+    mesh = sc.meshes[0]
+    mat = sc.materials[0]
     light = renderer.new_light(
         gl.PointLightInfo(
             gl.vec3f(0, 8, -1),
@@ -101,6 +110,7 @@ def create(entity_manager, event_manager, renderer, initial_player_pos = (0, 0))
             gl.Color3f("#333"),
         )
     )
+    #mat.textures[0].texture.generate_mipmap()
 
     player = entity_manager.create('player')
     player.pos = initial_player_pos
