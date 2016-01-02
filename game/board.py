@@ -1,19 +1,45 @@
+
+import itertools as it
+
 from cube import gl
 from cubeapp.game.entity.component import Transform, Drawable, Bindable, Controller
 from cubeapp.game.entity.component import Component
 from cubeapp.game.entity import System
 from cubeapp.game.event import Event
 
-def pos_to_tile(board, pos):
-    tile = gl.vec2i(
-        (pos.x - board.border) // board.tile_width,
-        (pos.y - board.border) // board.tile_height
-    )
-    if tile.x < 0: tile.x = 0
-    if tile.y < 0: tile.y = 0
-    if tile.x >= board.size.x: tile.x = board.size.x - 1
-    if tile.y >= board.size.y: tile.y = board.size.y - 1
-    return tile
+def frange(start, end, step = 1):
+    i = 0
+    next = start
+    if step > 0:
+        while next < end:
+            yield next
+            i += 1
+            next = start + step * i
+        yield next
+        return
+    else:
+        while next > end:
+            yield next
+            i += 1
+            next = start + step * i
+        yield next
+        return
+    assert False, "step is 0"
+
+def pos_to_tiles(board, pos, radius):
+    res = set()
+    for off_x in frange(-radius, radius, board.tile_width):
+        for off_y in frange(-radius, radius, board.tile_height):
+            tile = gl.vec2i(
+                ((pos.x + off_x) - board.border) // board.tile_width,
+                ((pos.y + off_y) - board.border) // board.tile_height
+            )
+            if tile.x < 0: tile.x = 0
+            if tile.y < 0: tile.y = 0
+            if tile.x >= board.size.x: tile.x = board.size.x - 1
+            if tile.y >= board.size.y: tile.y = board.size.y - 1
+            res.add(tile)
+    return res
 
 class DrawGround(gl.Drawable):
     def __init__(self, board, size):
@@ -46,9 +72,10 @@ class Cell:
     def __init__(self, color):
         self.color = color
 
-    def __call__(self, board, tile):
+    def __call__(self, board, tile, player, colliding):
         # Called when the player enter to this tile
-        self.set_color(board, tile, gl.col3f('purple'))
+        #self.set_color(board, tile, gl.col3f('purple'))
+        pass
 
     def prepare(self, board, tile):
         # Called at startup for each board cell
@@ -70,17 +97,24 @@ class SetBoardFriction:
     def prepare(self, board, tile):
         pass
 
-    def __call__(self, board, tile):
+    def __call__(self, board, tile, player, colliding):
         board.event_manager.push(
             Event('set-board-friction',  friction = self.friction)
         )
+
+class Wall:
+    def prepare(self, board, tile):
+        pass
+
+    def __call__(self, board, tile, player, colliding):
+        colliding.append(tile)
 
 # Mapping between ascii codes and controllers
 # Multiple controllers can be set per character, their __call__ method will
 # be triggered whenever the player cross a particular cell.
 cell_controllers = {
     '@': (Cell(gl.col3f('red')), ),
-    '#': (Cell(gl.col3f('white')), SetBoardFriction(friction = .5),),
+    '#': (Cell(gl.col3f('white')), Wall()),
     'x': (
         Cell(gl.col3f('#2342ff')),
         SetBoardFriction(friction = 5),
@@ -92,7 +126,7 @@ class CellManager(Controller):
     channels = ['player-moved']
     def __init__(self, board):
         self.cells = {}
-        self.current_tile = None
+        self.current_tiles = None
         self.board = board
         y = 0
         for row in self.board.rows:
@@ -106,13 +140,66 @@ class CellManager(Controller):
                 x += 1
             y += 1
 
+    last_colliding = []
     def __call__(self, ev, delta):
-        tile = pos_to_tile(self.board, ev.new)
-        if tile != self.current_tile:
-            self.current_tile = tile
+        tiles = pos_to_tiles(self.board, ev.new, ev.player.radius)
+        ev.player.force = gl.vec3f(0)
+        self.current_tiles = tiles
+        colliding = []
+        for tile in tiles:
             controllers = self.cells.get(tile, [])
             for controller in controllers:
-                controller(self.board, tile)
+                controller(self.board, tile, ev.player, colliding)
+
+        for tile in self.last_colliding:
+            if tile not in colliding:
+                self.cells.get(tile)[0].prepare(self.board, tile)
+        self.last_colliding = colliding
+        tile_w, tile_h = self.board.tile_width, self.board.tile_height
+        border = gl.vec2f(self.board.border, self.board.border)
+        for i, tile in enumerate(colliding):
+            self.cells.get(tile)[0].set_color(self.board, tile, gl.col3f('purple'))
+            tile_pos = gl.vec2f(tile.x * tile_w, tile.y * tile_h) + border
+            print("PIF!", i, ev.new, tile, tile_pos, self.board.border,
+                  tile_w, tile_h)
+            if ev.new.x >= tile_pos.x and \
+               ev.new.x < tile_pos.x + tile_w:
+                if ev.new.y + ev.player.radius >= tile_pos.y \
+                   and ev.new.y < tile_pos.y + tile_h:
+                    print("YEAH!", i, ev.new, tile, tile_pos, self.board.border,
+                          tile_w, tile_h)
+                    if ev.player.velocity.y > 0:
+                        ev.player.velocity.y *= -.5
+                    if abs(ev.player.velocity.y) < 50:
+                        ev.player.force = -ev.player.gravity
+                        ev.player.velocity.y = 0
+                        ev.player.velocity.x *= .9
+                        if abs(ev.player.velocity.x) < 5:
+                            ev.player.velocity.x = 0
+                    ev.player.pos.y = tile_pos.y - ev.player.radius
+                elif ev.new.y - ev.player.radius <= tile_pos.y + tile_h and \
+                     ev.new.y > tile_pos.y:
+                    print("BIM")
+                    if ev.player.velocity.y < 0:
+                        ev.player.velocity.y *= -1
+                    ev.player.pos.y = tile_pos.y + tile_h + ev.player.radius
+            if ev.new.y >= tile_pos.y and \
+               ev.new.y < tile_pos.y + tile_h:
+                if ev.new.x > ev.old.x and \
+                   ev.new.x + ev.player.radius >= tile_pos.x and \
+                   ev.new.x < tile_pos.x + tile_w:
+                    if ev.player.velocity.x > 0:
+                        ev.player.velocity.x *= -.9
+                    ev.player.pos.x = tile_pos.x - ev.player.radius
+                elif ev.new.x - ev.player.radius <= tile_pos.x + tile_w and \
+                     ev.new.x > tile_pos.x:
+                    if ev.player.velocity.x < 0:
+                        ev.player.velocity.x *= -.9
+                    ev.player.pos.x = tile_pos.x + tile_w + ev.player.radius
+
+
+            #if player.velocity.y > 0:
+            #    player.velocity.y *= -.5
 
 
 def create(game, size, border, tile_width, tile_height, rows):

@@ -6,7 +6,7 @@ from cube import gl, units
 from cubeapp.game.entity.component import Transform, Drawable, Bindable, Controller
 from cubeapp.game.event import Event, Channel
 from cubeapp.game import Game as BasicGame
-from cube.system.inputs import Button
+from cube.system.inputs import Button, KeySym, KeyMod
 
 DOCUMENT = """
 <rml>
@@ -31,14 +31,23 @@ from . import power
 
 class Game(BasicGame):
 
+    bindings = {
+        'keyboard': {
+            'up': KeySym.up,
+            'down': KeySym.down,
+            'left': KeySym.left,
+            'right': KeySym.right,
+        }
+    }
+
     def __init__(self, window, directory):
-        super().__init__(window, directory)
+        super().__init__(window, directory, bindings = self.bindings)
         self.window.add_font(self.directory / 'FreeMono.ttf')
         self.resource_manager.add_path(str(self.directory / 'resource'))
         document = self.window.load_document(DOCUMENT)
         self.title = document.by_id("title")
         size = gl.vec2u(10, 10)
-        border = 10
+        border = 5
         self.board = board.load(
             self.directory / 'resource/map/00.txt',
             game = self,
@@ -49,7 +58,7 @@ class Game(BasicGame):
             entity_manager = self.entity_manager,
             event_manager = self.event_manager,
             renderer = self.renderer,
-            initial_player_pos = gl.vec3f(border + 10, border + 10, 0),
+            initial_player_pos = gl.vec3f(border + 200, border + 200, 0),
         )
         self.light = self.renderer.new_light(
             gl.PointLightInfo(
@@ -58,55 +67,25 @@ class Game(BasicGame):
                 gl.Color3f("#333"),
             )
         )
-        self.power = power.create(
-            shape = gl.Rectanglef(
-                self.window.width - 35,
-                self.window.height,
-                30,
-                1
-            ),
-            entity_manager = self.entity_manager
-        )
         self.scene_view = self.scene.drawable(self.renderer)
         self.last_time = time.time()
         window.inputs.on_mousedown.connect(self.__on_mousedown)
         window.inputs.on_mouseup.connect(self.__on_mouseup)
-        self.event_manager.push(
-            Event(
-                'board-size',
-                board_size = gl.Rectanglef(
-                    border,
-                    border,
-                    self.window.width - border * 2,
-                    self.window.height - border * 2,
+
+        for key in ('up', 'down', 'left', 'right'):
+            slot = getattr(self.input_translator.keyboard, key).key_held
+            slot.connect(
+                lambda ev, key = key: self.event_manager.push(
+                    Event('move-player', key = key)
                 )
             )
-        )
 
 
     def __on_mousedown(self, button, keymod):
-        self.event_manager.push(Event('start-power'))
+        pass
 
     def __on_mouseup(self, button, keymod):
-        self.event_manager.push(Event('stop-power'))
-        mouse = self.window.system_window.mouse_position
-        self.event_manager.push(
-            Event(
-                'move-player',
-                pos = gl.vec3f(mouse.x, mouse.y, 0),
-                power = self.power.shape.h
-            )
-        )
-
-    #def __pointed_tile(self):
-    #    return self.pos_to_tile(self.window.system_window.mouse_position)
-
-    #def tile_to_pos(self, tile):
-    #    return gl.vec3f(
-    #        tile.x * self.tile_width + self.border,
-    #        tile.y * self.tile_height + self.border,
-    #        0
-    #    )
+        pass
 
 
 
@@ -116,10 +95,19 @@ class Game(BasicGame):
         self.last_time = new_time
         with self.renderer.begin(gl.mode_2d) as painter:
             #painter.state.look_at(
-            #    gl.vec3f(0,0,self.size * 2), gl.vec3f(0, 0, 0), gl.vec3f(0, 1, 0)
+            #    gl.vec3f(0,0,-1), gl.vec3f(0, 0, 1), gl.vec3f(0, 1, 0)
             #)
             #painter.state.perspective(
             #    units.deg(45), self.window.width / self.window.height, 0.005, 300.0
             #)
+            #painter.state.look_at(
+            #    gl.vec3f(self.window.width / 2, self.window.height / 2, -800),
+            #    gl.vec3f(self.window.width / 2, self.window.height / 2, 0),
+            #    gl.vec3f(0, 1, 0)
+            #)
+            #painter.state.perspective(
+            #    units.deg(45), self.window.width / self.window.height, 0.005, 3000.0
+            #)
+            painter.state.view = gl.matrix.translate(gl.mat4f(), -self.player.pos + gl.vec3f(self.window.width / 2, self.window.height / 2, 0))
             with painter.bind([self.light]):
                 painter.draw([self.scene_view])
