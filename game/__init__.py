@@ -27,7 +27,7 @@ DOCUMENT = """
 
 from . import player
 from . import board
-from . import power
+from . import camera
 
 class Game(BasicGame):
 
@@ -60,6 +60,7 @@ class Game(BasicGame):
             renderer = self.renderer,
             initial_player_pos = gl.vec3f(border + 200, border + 200, 0),
         )
+        self.camera = camera.create(entity_manager = self.entity_manager, initial_player_pos = self.player.pos)
         self.light = self.renderer.new_light(
             gl.PointLightInfo(
                 gl.vec3f(0, 2, -1),
@@ -108,6 +109,6 @@ class Game(BasicGame):
             #painter.state.perspective(
             #    units.deg(45), self.window.width / self.window.height, 0.005, 3000.0
             #)
-            painter.state.view = gl.matrix.translate(gl.mat4f(), -self.player.pos + gl.vec3f(self.window.width / 2, self.window.height / 2, 0))
+            painter.state.view = gl.matrix.translate(gl.mat4f(), -self.camera.pos + gl.vec3f(self.window.width / 2, self.window.height / 2, 0))
             with painter.bind([self.light]):
                 painter.draw([self.scene_view])
